@@ -1,0 +1,13 @@
+<?php
+
+/**
+ * @file
+ * 
+ */
+
+/**
+ * Implementation of hook_enable()
+ */
+function islandora_govdocs_enable() {
+ 
+}

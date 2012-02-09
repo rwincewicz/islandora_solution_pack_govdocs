@@ -1,0 +1,563 @@
+<?php
+
+/**
+ * @file 
+ * Islandora govdocs solution pack module
+ */
+
+/**
+ * Islandora govdocs menu
+ * @return array
+ */
+function islandora_govdocs_menu() {
+  $items = array();
+  $items['fedora/govdocs'] = array(
+    'title' => t('Govdocs book view'),
+    'page callback' => 'islandora_govdocs_create_book_view',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('view fedora collection'),
+  );
+  $items['fedora/govdocs_viewer'] = array(
+    'title' => t('Govdocs book viewer'),
+    'page callback' => 'islandora_govdocs_book_viewer',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('view fedora collection'),
+  );
+  
+  return $items;
+}
+
+function islandora_govdocs_perm() {
+  return array(
+    'delete govdocs pages',
+    'manage govdocs object',
+    'manage govdocs object',
+    );
+}
+
+function islandora_govdocs_islandora_tabs($content_models, $pid) {
+  module_load_include('inc', 'islandora_book', 'page_object_manager');
+  module_load_include('inc', 'islandora_book', 'book_object_manager');
+  module_load_include('inc', 'fedora_repository', 'plugins/FedoraObjectDetailedContent');
+  if (!variable_get('islandora_add_collection_tabs', TRUE)) {
+        drupal_add_css(drupal_get_path('module', 'islandora_book') . '/css/islandora_book.css');
+
+    return;
+  }
+
+  $content_model_pids = array();
+  $tabset = array();
+  $query = "select \$object from <#ri>
+            where (<info:fedora/$pid> <fedora-model:hasModel> \$object
+            and \$object <fedora-model:state> <info:fedora/fedora-system:def/model#Active>)
+           minus \$object <mulgara:is> <info:fedora/fedora-system:FedoraObject-3.0>";
+
+  $query = htmlentities(urlencode($query));
+  $content_model = '';
+  $url = variable_get('fedora_repository_url', 'http://localhost:8080/fedora/risearch');
+  $url .= "?type=tuples&flush=TRUE&format=csv&limit=$limit&offset=$offset&lang=itql&stream=on&query=" . $query;
+  $content .= do_curl($url);
+  $cm_parts = explode('/', $content);
+  $content_model = trim($cm_parts[1]);
+  if ($content_model == 'islandora:pageCModel' && user_access('manage page object')) {
+    $return_tabs = get_page_model_management_content($pid);
+   // $return_tabs['fedora_object_details'] = null;
+    return $return_tabs;
+  }
+
+  if ($content_model == 'islandora:bookCModel') {
+    $return_tabs = get_book_model_management_content($pid);
+   // $return_tabs['fedora_object_details'] = null;
+    return $return_tabs;
+  }
+}
+
+
+/**
+ * Implementation of hook_init
+ * (currenlty disabled)
+ */
+
+function disabled_islandora_govdocs_init() {
+
+    drupal_add_css(drupal_get_path('module', 'islandora_book') . '/css/islandora_book.css');
+   
+}
+
+/**
+ * Islandora govdocs book viewer
+ * Allows viewing of book object thorugh embedded player
+ * @global user $user
+ * @param string $pid
+ * @return html
+ */
+function islandora_govdocs_book_viewer($pid) {
+  global $user;
+  $qs = '';
+  if ($user->uid != 0) {
+    $qs = '?uid=' . base64_encode($user->name . ':' . $user->pass);
+  }
+
+  $viewer_url = variable_get('fedora_base_url', '') . '/get/' . $pid . '/islandora:viewerSdef/getViewer' . $qs;
+  $html = '<iframe src="' . $viewer_url . '" frameborder="0" scrolling="no" style="width: 100%; height: 800px;">Errors: unable to load viewer</iframe>';
+  $fieldset = array(
+    '#title' => t('Viewer - ') . $pid,
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+    '#value' => $html);
+  drupal_add_css(path_to_theme() . '/header-viewer.css', 'theme');
+  return theme('fieldset', $fieldset);
+}
+
+/**
+ * Load an xslt from the main book page uses mods for most of the display.
+ * @global user $user
+ * @param string $pid
+ * @param string $query Default NULL but if supplied then it will execute the query against the book
+ */
+function islandora_govdocs_create_book_view($pid, $query = NULL) {
+  global $user;
+  module_load_include('inc', 'fedora_repository', 'api/ObjectHelper');
+  $path = drupal_get_path('module', 'islandora_book');
+  $objectHelper = new ObjectHelper;
+  $xml = $objectHelper->getStream($pid, 'MODS');
+  $dc_xml = $objectHelper->getStream($pid, 'DC');
+  if (!$dc_xml) {
+    drupal_set_message(t('Object does not exist.'), 'error');
+    return '';
+  }
+  $simpleDCxml = simplexml_load_string($dc_xml);
+  $types = $simpleDCxml->xpath('//dc:type');
+  $ingested = 'FALSE';
+  if (!empty($types)) {
+    foreach ($types as $type) {
+      if ($type == 'ingested') {
+        $ingested = 'TRUE';
+      }
+    }
+  }
+
+  if (!isset($pid)) {
+    drupal_set_message(t('Error getting book view, no identifier specified.'));
+    return;
+  }
+  $proc = NULL;
+  try {
+    $proc = new XsltProcessor();
+  } catch (Exception $e) {
+    drupal_set_message(t('Error loading Book View XSLT: $e', array('@e' => check_plain($e->getMessage()))));
+    return;
+  }
+
+  //inject into xsl stylesheet
+  $proc->setParameter('', 'userID', $user->uid);
+  $proc->setParameter('', 'objectsPage', base_path());
+  $proc->setParameter('', 'pid', $pid);
+  $proc->setParameter('', 'ingested', $ingested);
+  $xsl = new DomDocument();
+  $test = $xsl->load($path . '/xsl/book_view.xsl');
+  if (!isset($test)) {
+    drupal_set_message(t('Error loading search results XSLT.'));
+    return t('Error loading search results XSLT.');
+  }
+
+  $input = new DomDocument();
+  $didLoadOk = $input->loadXML($xml);
+  $output = NULL;
+  if (!isset($didLoadOk)) {
+    drupal_set_message(t('Error loading Book View XML.'));
+    return t('Error loading Book View XML.');
+  }
+  else {
+    $xsl = $proc->importStylesheet($xsl);
+    $newdom = $proc->transformToDoc($input);
+    $output .= $newdom->saveXML();
+  }
+  if (isset($query)) {
+    module_load_include('inc', 'fedora_repository', 'core/SearchClass');
+    $searchClass = new SearchClass();
+    $pageQuery = govdocs_convert_query_to_page_query($query, $pid);
+    $output .= '<div>' . $searchClass->custom_search($pageQuery, $startPage, '/xsl/pageResults.xsl', 500) . '</div>'; //limit results to 500 pages of a book since there is no paging if we enable paging in xslt this can be changed
+    //return $output."<div>used this query to find this page $query and new query = $pageQuery</div>";
+
+    return $output;
+  }
+  else {
+    return $output;
+  }
+}
+
+/**
+ * convert query to a page query
+ * @param type $query
+ * @param type $pid
+ * @return string 
+ */
+function govdocs_convert_query_to_page_query($query, $pid) {
+  $newQuery = substr($query, 0, strlen($query) - 23);
+  $pid = str_replace(':', '?', $pid);
+  $newQuery = $newQuery . " AND PID:$pid* AND dc.type:Text";
+  return $newQuery;
+}
+
+/**
+ * Custom form element to do our nice images.
+ * @return boolean 
+ */
+function islandora_govdocs_elements() {
+  $type['imagebutton'] = array(
+    '#input' => TRUE,
+    '#button_type' => 'submit',
+    '#executes_submit_callback' => TRUE,
+    '#name' => 'op',
+    '#process' => array('hook_imagebutton_process' => array()),
+  );
+  return $type;
+}
+
+/**
+ * theme imagebutton
+ * @param type $element
+ * @return type 
+ */
+function govdocs_theme_imagebutton($element) {
+  return '<input  style="background:url(\'\'); border:0px; width:10px; padding:0px,0px,0px,0px;" type="image" class="form-' . $element['#button_type'] . '" name="' . $element['#name'] . '" id="' . $element['#id'] . '" value="' . check_plain($element['#default_value']) . '" ' . drupal_attributes($element['#attributes']) . ' src="' . $element['#image'] . '" alt="' . $element['#title'] . '" title="' . $element['#title'] . "\" />\n";
+}
+
+/**
+ * Implementation of hook_theme() to register how to theme image buttons.
+ * 
+ * @return type 
+ */
+function islandora_govdocs_theme() {
+  return array(
+    'imagebutton' => array(
+      'arguments' => array('form' => NULL),
+    ),
+    'islandora_govdocs_book_search_form' => array(
+      'arguments' => array('form' => NULL),
+    ),
+    'islandora_govdocs_simple_book_search_form' => array(
+      'arguments' => array('form' => NULL),
+    )
+  );
+}
+
+/**
+ * Implementation of hook_requirements().
+ *
+ * @return
+ *   An array describing the status of the site regarding available updates.
+ *   If there is no update data, only one record will be returned, indicating
+ *   that the status of core can't be determined. If data is available, there
+ *   will be two records: one for core, and another for all of contrib
+ *   (assuming there are any contributed modules or themes enabled on the
+ *   site). In addition to the fields expected by hook_requirements ('value',
+ *   'severity', and optionally 'description'), this array will contain a
+ *   'reason' attribute, which is an integer constant to indicate why the
+ *   given status is being returned (UPDATE_NOT_SECURE, UPDATE_NOT_CURRENT, or
+ *   UPDATE_UNKNOWN). This is used for generating the appropriate e-mail
+ *   notification messages during update_cron(), and might be useful for other
+ *   modules that invoke update_requirements() to find out if the site is up
+ *   to date or not.
+ *
+ * @see _update_message_text()
+ * @see _update_cron_notify()
+ */
+//function islandora_govdocs_requirements($phase) {
+//  global $base_url;
+//  if ($phase == 'runtime') {
+//    module_load_include('inc', 'fedora_repository', 'api/fedora_utils');
+//    $requirements['iiv-war'] = array();
+//    $requirements['iiv-war']['title'] = t("Islandora OpenLayers image viewer web app");
+//    if (!_islandora_govdocs_viewer_available()) {
+//      $requirements['iiv-war']['value'] = ("Not available");
+//      $requirements['iiv-war']['severity'] = REQUIREMENT_ERROR;
+//      $requirements['iiv-war']['description'] = t('Ensure that Fedora is running and that the <a href="@iiv-home">IIV</a> app is deployed.', array('@iiv-home' => 'http://github.com/islandora/iiv'));
+//    }
+//    else {
+//      $requirements['iiv-war']['value'] = ("Available");
+//      $requirements['iiv-war']['severity'] = REQUIREMENT_OK;
+//    }
+//  }
+//  return $requirements;
+//}
+
+/**
+ * _islandora_govdocs_viewer_available 
+ * @return boolean
+ */
+function _islandora_govdocs_viewer_available() {
+  $url = parse_url(variable_get('fedora_base_url', 'http://localhost:8080/fedora'));
+  $fedora_host = ("{$url['scheme']}://{$url['host']}" . (!empty($url['port']) ? ":{$url['port']}/" : '/'));
+  $response = drupal_http_request("$fedora_host/iiv/images/loading.gif");
+  return empty($response->error);
+}
+
+/**
+ * islandora govdocs required fedora objects
+ * @return array
+ */
+function islandora_govdocs_required_fedora_objects() {
+
+  // Add the form and associate it to the content model
+  $module_path = drupal_get_path('module', 'islandora_govdocs');
+  $book_form_name = 'Islandora Books MODS Form';
+  $book_form_xml = file_get_contents("$module_path/xml/mods_book.xml");
+  solution_pack_add_form($book_form_name, $book_form_xml);
+  solution_pack_add_form_association('islandora:govdocsbookCModel', $book_form_name);
+  
+  $book_chapter_form_name = 'Islandora Book Chapter MODS Form';
+  $book_chapter_form_xml = file_get_contents("$module_path/xml/mods_book_chapter.xml");
+  solution_pack_add_form($book_chapter_form_name, $book_chapter_form_xml);
+  solution_pack_add_form_association('islandora:govdocsbookCModel', $book_chapter_form_name);
+  
+  $journal_form_name = 'Islandora Journal MODS Form';
+  $journal_form_xml = file_get_contents("$module_path/xml/mods_journal.xml");
+  solution_pack_add_form($journal_form_name, $journal_form_xml);
+  solution_pack_add_form_association('islandora:govdocsbookCModel', $journal_form_name);
+
+  $article_form_name = 'Islandora Article MODS Form';
+  $article_form_xml = file_get_contents("$module_path/xml/mods_article.xml");
+  solution_pack_add_form($article_form_name, $article_form_xml);
+  solution_pack_add_form_association('islandora:govdocsbookCModel', $article_form_name);
+  
+  $issue_form_name = 'Islandora Issue MODS Form';
+  $issue_form_xml = file_get_contents("$module_path/xml/mods_issue.xml");
+  solution_pack_add_form($issue_form_name, $issue_form_xml);
+  solution_pack_add_form_association('islandora:govdocsbookCModel', $issue_form_name);
+  
+  $volume_form_name = 'Islandora Volume MODS Form';
+  $volume_form_xml = file_get_contents("$module_path/xml/mods_volume.xml");
+  solution_pack_add_form($volume_form_name, $volume_form_xml);
+  solution_pack_add_form_association('islandora:govdocsbookCModel', $volume_form_name);
+  
+  return array(
+    'islandora_govdocs' => array(
+      'module' => 'islandora_govdocs',
+      'title' => 'Islandora Govdocs',
+      'objects' => array(
+        array(
+          'pid' => 'islandora:govdocscollectionCModel',
+          'label' => 'Islandora Govdocs Collection Content Model',
+          'dsid' => 'ISLANDORACM',
+          'datastream_file' => "$module_path/xml/govdocs_collectioncm.xml",
+          'dsversion' => 2,
+          'cmodel' => 'fedora-system:ContentModel-3.0',
+        ),
+        array(
+          'foxml_file' => "$module_path/xml/islandora_pageCModel.xml",
+          'pid' => 'islandora:pageCModel',
+          'dsid' => NULL,
+          'datastream_file' => NULL,
+          'dsversion' => NULL,
+        ),
+        array(
+          'foxml_file' => "$module_path/xml/islandora_govdocs_bookCModel.xml",
+          'pid' => 'islandora:govdocsbookCModel',
+          'dsid' => NULL,
+          'datastream_file' => NULL,
+          'dsversion' => NULL,
+        ),
+        array(
+          'foxml_file' => "$module_path/xml/islandora_jp2Sdef.xml",
+          'pid' => 'islandora:jp2Sdef',
+          'dsid' => NULL,
+          'datastream_file' => NULL,
+          'dsversion' => NULL,
+        ),
+        array(
+          'foxml_file' => "$module_path/xml/islandora_viewerSdef.xml",
+          'pid' => 'islandora:viewerSdef',
+          'dsid' => NULL,
+          'datastream_file' => NULL,
+          'dsversion' => NULL,
+        ),
+        array(
+          'foxml_file' => "$module_path/xml/islandora_govdocs_viewerSdep-bookCModel.xml",
+          'pid' => 'islandora:govdocsviewerSdep-bookCModel',
+          'dsid' => NULL,
+          'datastream_file' => NULL,
+          'dsversion' => NULL,
+        ),
+        array(
+          'foxml_file' => "$module_path/xml/islandora_viewerSdep-pageCModel.xml",
+          'pid' => 'islandora:viewerSdep-pageCModel',
+          'dsid' => NULL,
+          'datastream_file' => NULL,
+          'dsversion' => NULL,
+        ),
+        array(
+          'foxml_file' => "$module_path/xml/islandora_tei2htmlSdef.xml",
+          'pid' => 'islandora:tei2htmlSdef',
+          'dsid' => NULL,
+          'datastream_file' => NULL,
+          'dsversion' => NULL,
+        ),
+        array(
+          'foxml_file' => "$module_path/xml/islandora_tei2htmlSdep-pageCModel.xml",
+          'pid' => 'islandora:tei2htmlSdep-pageCModel',
+          'dsid' => NULL,
+          'datastream_file' => NULL,
+          'dsversion' => NULL,
+        ),
+        array(
+          'foxml_file' => "$module_path/xml/islandora_govdocs_book_collection.xml",
+          'pid' => 'islandora:govdocs_collection',
+          'dsid' => NULL,
+          'datastream_file' => NULL,
+          'dsversion' => NULL,
+        ),
+        array(
+          'foxml_file' => "$module_path/xml/islandora_jp2Sdep-pageCModel.xml",
+          'pid' => 'islandora:jp2Sdep-pageCModel',
+          'dsid' => NULL,
+          'datastream_file' => NULL,
+          'dsversion' => NULL,
+        ),
+        array(
+          'pid' => 'islandora:govdocsCollection',
+          'label' => 'Govdocs Collection',
+          'cmodel' => 'islandora:govdocscollectionCModel',
+          'parent' => 'islandora:root',
+          'datastreams' => array(
+            array(
+              'dsid' => 'COLLECTION_POLICY',
+              'datastream_file' => "$module_path/xml/book_collection_policy.xml",
+            ),
+            array(
+              'dsid' => 'TN',
+              'datastream_file' => "$module_path/images/Crystal_Clear_filesystem_folder_grey.png",
+              'mimetype' => 'image/png',
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/**
+ * islandora govdocs purge pages form
+ * @global string $base_url
+ * @param array $form_state
+ * @param string $pid
+ * @param string $referrer
+ * @return array
+ */
+function islandora_govdocs_purge_pages_form(&$form_state, $pid, $referrer = NULL) {
+  global $base_url;
+  if (!user_access('purge objects and datastreams')) {
+    return NULL;
+  }
+  if ($pid == NULL) {
+    return NULL;
+  }
+  $form['pid'] = array(
+    '#type' => 'hidden',
+    '#value' => "$pid"
+  );
+  if (!strstr(drupal_get_destination(), urlencode('fedora/repository'))) {
+    $form['referrer'] = array(
+      '#type' => 'hidden',
+      '#value' => $referrer,
+    );
+  }
+  if (!isset($form_state['storage']['confirm'])) {
+    // do your normal $form definition here
+
+
+    $form['submit'] = array(
+      '#type' => 'image_button',
+      '#src' => drupal_get_path('module', 'fedora_repository') . '/images/purge_big.png',
+      '#value' => t('Purge'),
+      '#suffix' => 'Purge all pages associated with this book',
+    );
+
+    return $form;
+  }
+  else {
+    // ALSO do $form definition here. Your final submit handler (after user clicks Yes, I Confirm) will only see $form_state info defined here. Form you create here passed as param1 to confirm_form
+
+    return confirm_form($form, 'Confirm Purge ALL pages?', $referrer, 'Are you sure you want to delete these objects? This action cannot be undone.', 'Purge Pages', 'Cancel'); //Had better luck leaving off last param 'name'
+  }
+  return $form;
+}
+
+/**
+ * islandora govdocs purge pages form submit
+ * @param array $form
+ * @param array $form_state
+ */
+function islandora_govdocs_purge_pages_form_submit($form, &$form_state) {
+  module_load_include('inc', 'fedora_repository', 'api/ConnectionHelper');
+  module_load_include('inc', 'islandora_book', 'book_pack_utils');
+  $pid = $form_state['values']['pid'];
+  if (!isset($form_state['storage']['confirm'])) {
+    $form_state['storage']['confirm'] = TRUE; // this will cause the form to be rebuilt, entering the confirm part of the form
+    $form_state['rebuild'] = TRUE; // along with this
+  }
+  else {
+    unset($form_state['storage']['confirm']);
+    $soapHelper = new ConnectionHelper();
+    $client = $soapHelper->getSoapClient(variable_get('fedora_soap_manage_url', 'http://localhost:8080/fedora/services/management?wsdl'));
+    $pids_to_delete = get_page_pids($pid);
+    foreach ($pids_to_delete as $pid_to_delete) {
+      $params = array(
+        "pid" => $pid_to_delete,
+        "logMessage" => "Purged",
+        "force" => ""
+      );
+      try {
+
+        $object = $client->__soapCall('purgeObject', array($params));
+        // unset($form_state['storage']['confirm']);
+      } catch (exception $e) {
+        if (preg_match('/org\.fcrepo\.server\.security\.xacml\.pep\.AuthzDeniedException/', $e->getMessage())) {
+          drupal_set_message(t('Error:  Insufficient permissions to purge object.'), 'error');
+        }
+        else {
+          drupal_set_message(t("@message", check_plain($e->getMessage())), 'error');
+        }
+        return;
+      }
+    }
+
+    $form_state['redirect'] = "fedora/repository/$pid";
+  }
+}
+
+/**
+ * islandora govdocs help
+ * implementaion of hook_help()
+ * @param type $path
+ * @param type $arg
+ * @return type 
+ */
+function islandora_govdocs_help($path, $arg) {
+  switch ($path) {
+    case 'admin/help#islandora_govdocs':
+      return t(
+          '<p>
+         The Islandora Govdocs Module allows users to create digital representations of books within the Fedora Repository.
+         A book object is created using !mods data. A collection of associated page objects may then be created created. Page objects
+         are created by ingesting a zipped folder of TIFF images, each representing a distinct page.
+         Page TIFFs are used to create a series of Fedora datastreams on ingestion.  These streams include derivative images
+         for display - JPEGS, Thumbnails, and JP2s, and one ore more OCR streams for text display and analysis.
+         </p>
+         <p>
+         <h3>Configuration</h3>
+         The page datatreams may be created on this server, or on an external processing server with !microservices.<br/>
+         To process images from TIFFS on this server check <strong>Create derivative images locally?</strong> on the admin page. (Link at the bottom of this page).<br />
+         TO create OCR streams on this server check <strong>Perform OCR on incoming TIFF images?</strong>. <br /><br />
+
+
+         
+        ', array(
+        '!microservices' => l("Fedora Microservices", 'https://github.com/Islandora/fedora_microservices'),
+        '!mods' => l('MODS', 'http://www.loc.gov/standards/mods/'),
+          )
+      );
+  }
+}
+
