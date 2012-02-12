@@ -306,31 +306,37 @@ function islandora_govdocs_required_fedora_objects() {
   $book_form_xml = file_get_contents("$module_path/xml/mods_book.xml");
   solution_pack_add_form($book_form_name, $book_form_xml);
   solution_pack_add_form_association('islandora:govdocsbookCModel', $book_form_name);
+  solution_pack_add_form_association('islandora:govdocscollectionCModel', $book_form_name);
   
   $book_chapter_form_name = 'Islandora Book Chapter MODS Form';
   $book_chapter_form_xml = file_get_contents("$module_path/xml/mods_book_chapter.xml");
   solution_pack_add_form($book_chapter_form_name, $book_chapter_form_xml);
   solution_pack_add_form_association('islandora:govdocsbookCModel', $book_chapter_form_name);
+  solution_pack_add_form_association('islandora:govdocscollectionCModel', $book_chapter_form_name);
   
   $journal_form_name = 'Islandora Journal MODS Form';
   $journal_form_xml = file_get_contents("$module_path/xml/mods_journal.xml");
   solution_pack_add_form($journal_form_name, $journal_form_xml);
   solution_pack_add_form_association('islandora:govdocsbookCModel', $journal_form_name);
+  solution_pack_add_form_association('islandora:govdocscollectionCModel', $journal_form_name);
 
   $article_form_name = 'Islandora Article MODS Form';
   $article_form_xml = file_get_contents("$module_path/xml/mods_article.xml");
   solution_pack_add_form($article_form_name, $article_form_xml);
   solution_pack_add_form_association('islandora:govdocsbookCModel', $article_form_name);
+  solution_pack_add_form_association('islandora:govdocscollectionCModel', $article_form_name);
   
   $issue_form_name = 'Islandora Issue MODS Form';
   $issue_form_xml = file_get_contents("$module_path/xml/mods_issue.xml");
   solution_pack_add_form($issue_form_name, $issue_form_xml);
   solution_pack_add_form_association('islandora:govdocsbookCModel', $issue_form_name);
+  solution_pack_add_form_association('islandora:govdocscollectionCModel', $issue_form_name);
   
   $volume_form_name = 'Islandora Volume MODS Form';
   $volume_form_xml = file_get_contents("$module_path/xml/mods_volume.xml");
   solution_pack_add_form($volume_form_name, $volume_form_xml);
   solution_pack_add_form_association('islandora:govdocsbookCModel', $volume_form_name);
+  solution_pack_add_form_association('islandora:govdocscollectionCModel', $volume_form_name);
   
   return array(
     'islandora_govdocs' => array(

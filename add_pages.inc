@@ -303,6 +303,7 @@ function makePDF($book_pid, $file_list, $tmpDir) {
 
 function govdocs_management_form(&$form_state, $this_collection_pid) {
   module_load_include('inc', 'fedora_repository', 'api/fedora_utils');
+  module_load_include('module', 'fedora_repository', 'fedora_repository');
   $restricted = FALSE;
   if (variable_get('fedora_namespace_restriction_enforced', TRUE)) {
     $restricted = TRUE;
@@ -318,11 +319,12 @@ function govdocs_management_form(&$form_state, $this_collection_pid) {
   module_load_include('inc', 'fedora_repository', 'CollectionPolicy');
   $item = new Fedora_Item($this_collection_pid);
   $collection_name = $item->objectProfile->objLabel;
-  $new_content_models = get_content_models_as_option_array();
+  $form_names = islandora_content_model_get_form_names('islandora:govdocscollectionCModel');
 
   $content_models = get_content_models_as_option_array();
+  $form['#attributes'] = array('enctype' => "multipart/form-data");
   $form['child_creation'] = array(
-    '#title' => "Create Child Collection",
+    '#title' => "Create Subsection",
     '#type' => 'fieldset',
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
@@ -330,62 +332,56 @@ function govdocs_management_form(&$form_state, $this_collection_pid) {
 
   $form['child_creation']['titlebox'] = array(
     '#type' => 'item',
-    '#value' => t("Create New Child Collection within $this_collection_pid"),
+    '#value' => t("Create New Subsection within $this_collection_pid"),
   );
 
   $form['child_creation']['collection_name'] = array(
     '#title' => "Collection Name",
     '#type' => 'textfield',
-    '#description' => t("Human readable name for this collection"),
+    '#description' => t("Human readable name for this subsection"),
   );
 
-//  $form['child_creation']['new_collection_pid'] = array(
-//    '#title' => "Collection PID",
-//    '#type' => 'textfield',
-//    '#size' => 15,
-//    '#description' => t("Unique PID for this collection.  <br />Pids take the general form of namespace:collection eg islandora:pamphlets"),
-//  );
-//  if (!$restricted) {
-//    $form['child_creation']['collection_namespace'] = array(
-//      '#title' => "Collection Namespace",
-//      '#type' => 'textfield',
-//      '#size' => 15,
-//      '#default_value' => 'default',
-//      '#description' => t("Namespace for objects in this collection."),
-//    );
-//  }
-//  else {
-//    $form['child_creation']['collection_namespace'] = array(
-//      '#title' => "Collection Namespace",
-//      '#type' => 'select',
-//      '#options' => $allowed,
-//      '#default_value' => 'default',
-//      '#description' => t("Namespace for objects in this collection."),
-//    );
-//  }
   $form['parent_collection'] = array(
     '#type' => 'hidden',
     '#value' => $this_collection_pid,
   );
-  
+
   $form['collection_pid'] = array(
     '#type' => 'hidden',
     '#value' => $this_collection_pid,
   );
-  $form['child_creation']['content_models'] = array(
-    '#title' => "Choose allowable content models for this collection",
-    '#type' => 'checkboxes',
-    '#options' => $content_models,
-    '#description' => t("Content models describe the behaviours of objects with which they are associated."),
-  );
-
 
   $form['child_creation']['submit'] = array(
     '#type' => 'submit',
-    '#value' => t('Create Collection'),
+    '#value' => t('Create Subsection'),
     '#id' => 'create_class'
   );
-  
+
+  $form['mods_creation'] = array(
+    '#title' => "Create MODS record",
+    '#type' => 'fieldset',
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+  );
+
+  $form['mods_creation']['upload'] = array(
+    '#type' => 'file',
+    '#title' => t('Upload MODS XML or Refworks file'),
+    '#size' => 50,
+  );
+
+  $form['mods_creation']['url'] = array(
+    '#type' => 'textfield',
+    '#title' => t('MODS URL'),
+    '#size' => 40,
+  );
+
+  $form['mods_creation']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Submit'),
+    '#id' => 'mods_submit',
+  );
+
   if (user_access('delete entire collections')) {
     $form['delete_collection'] = array(
       '#title' => "Permanently Delete $collection_name",
@@ -417,25 +413,12 @@ function govdocs_management_form(&$form_state, $this_collection_pid) {
  * @param array $form_state
  */
 function govdocs_management_form_validate($form, &$form_state) {
-  if ($form_state['clicked_button']['#id'] == 'create_class') {
-    module_load_include('inc', 'fedora_repository', 'api/fedora_item');
-    module_load_include('inc', 'fedora_repository', 'api/fedora_utils');
-    $pid = $form_state['values']['new_collection_pid'];
-    $item = new fedora_item($pid);
-    if ($item->exists()) {
-      form_set_error('new_collection_pid', t("$pid already exists within your repository. the PID must be unique"));
-      return;
-    }
-    if (!valid_pid($pid)) {
-      form_set_error('new_collection_pid', t("$pid is not a valid identifier"));
-      return;
-    }
+  if ($form_state['clicked_button']['#id'] == 'mods_submit' && file_save_upload('upload') == 0 && $form_state['values']['url'] == NULL) {
+    form_set_error('url', t('You must upload a file or enter a URL!'));
   }
-  if ($form_state['clicked_button']['#id'] == 'add_cm') {
-    if (!valid_pid($form_state['values']['new_cp_namespace'])) {
-      form_set_error('new_cp_namespace', t("Namespace must be a valid PID"));
-      return;
-    }
+  
+  if ($form_state['clicked_button']['#id'] == 'create_class' && $form_state['values']['collection_name'] == NULL) {
+      form_set_error('collection_name', t('You must enter a name for the new subsection!'));
   }
 }
 
@@ -451,14 +434,17 @@ function govdocs_management_form_submit($form, &$form_state) {
   module_load_include('inc', 'fedora_repository', 'api/dublin_core');
   module_load_include('inc', 'fedora_repository', 'CollectionManagement');
   global $user;
+  global $base_url;
+  $path = drupal_get_path('module', 'islandora_govdocs');
   $collection_pid = $form_state['values']['parent_collection'];
   $policy = CollectionPolicy::loadFromCollection($collection_pid, TRUE);
+
   if ($form_state['clicked_button']['#id'] == 'create_class') {
     $module_path = drupal_get_path('module', 'fedora_repository');
     $thumbnail = drupal_get_path('module', 'Fedora_Repository') . '/images/Crystal_Clear_filesystem_folder_grey.png';
-    $new_collection_pid = $form_state['values']['new_collection_pid'];
+    $pid_namespace = 'islandora';
+    $new_collection_pid = Fedora_Item::get_next_PID_in_namespace($pid_namespace);
     $new_collection_label = $form_state['values']['collection_name'];
-    $pid_namespace = $form_state['values']['collection_namespace'];
     $all_cModels = get_content_models_as_option_array();
     $collection_policy = '<?xml version="1.0" encoding="UTF-8"?>
 <collection_policy xmlns="http://www.islandora.ca" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="" xsi:schemaLocation="http://www.islandora.ca http://syn.lib.umanitoba.ca/collection_policy.xsd">
@@ -469,7 +455,7 @@ function govdocs_management_form_submit($form, &$form_state) {
     <staging_area></staging_area>
     <relationship>isMemberOfCollection</relationship>
 </collection_policy>';
-    $content_models = $form_state['values']['content_models'];
+    $content_models = array('islandora:govdocsbookCModel');
     $collection_policy_xml = simplexml_load_string($collection_policy);
     foreach ($content_models as $content_model) {
       if ($content_model) {
@@ -482,82 +468,79 @@ function govdocs_management_form_submit($form, &$form_state) {
     }
     $item = fedora_item::ingest_new_item($new_collection_pid, 'A', $new_collection_label, $user->name);
     $item->add_relationship('isMemberOfCollection', $collection_pid, RELS_EXT_URI);
-    $item->add_relationship('hasModel', 'islandora:collectionCModel', FEDORA_MODEL_URI);
+    $item->add_relationship('hasModel', 'islandora:govdocscollectionCModel', FEDORA_MODEL_URI);
     $item->add_datastream_from_string($collection_policy_xml->saveXML(), 'COLLECTION_POLICY');
     $item->add_datastream_from_file($thumbnail, 'TN');
-    drupal_goto("/fedora/repository/$new_collection_pid");
+
+    $collection = new Fedora_Item($collection_pid);
+    $collection_mods = $collection->get_datastream_dissemination('MODS');
+    $mods_xml = new DOMDocument();
+    $mods_xml->loadXML($collection_mods);
+    $xsl_dom = new DOMDocument();
+    $xsl_dom->load($path . '/xsl/related-item.xsl');
+    $mods_xsl = new XSLTProcessor();
+    $mods_xsl->importStylesheet($xsl_dom);
+    $mods_string = $mods_xsl->transformToXml($mods_xml);
+    $mods_string = str_replace(array('<mods xmlns="http://www.loc.gov/mods/v3" xmlns:mods="http://www.loc.gov/mods/v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xlink="http://www.w3.org/1999/xlink">', '</mods>'), '', $mods_string) . '</mods>';
+    drupal_set_message('XML: ' . $mods_string);
+    $item->add_datastream_from_string($mods_string, 'MODS');
+    $item->add_relationship('isPartOf', $collection_pid);
+    $collection_item = new Fedora_Item($collection_pid);
+    $collection_item->add_relationship('hasPart', $new_collection_pid);
+    drupal_goto("fedora/repository/$new_collection_pid");
   }
 
-  if ($form_state['clicked_button']['#id'] == 'add_cm') {
+  if ($form_state['clicked_button']['#id'] == 'mods_submit') {
 
-    $cp_namespace = $form_state['values']['new_cp_namespace'];
-    $cp_content_model = $form_state['values']['content_model_to_add'];
-    $policy->addModel(ContentModel::loadFromModel($cp_content_model), $cp_namespace);
-    $policy->saveToFedora();
-    drupal_set_message("Collection model successfully added");
+    if (file_save_upload('upload') != 0) {
+      $file = file_save_upload('upload');
+      $file_url = str_replace(' ', '%20', $base_url . '/' . $file->filepath);
+      $contents = file_get_contents($file_url);
+      $contents_header = substr($contents, 0, 14);
+      if ($contents_header == '<?xml version=') {
+      drupal_set_message('Contents: ' . $contents);
+      $item = new Fedora_Item($collection_pid);
+      $result = $item->modify_datastream_by_reference($file_url, 'MODS', 'MODS record', 'text/xml');
+      if ($result) {
+          drupal_set_message(t('@file has been successfully uploaded', array('@file' => $file->filename))); 
+        }
+        else {
+          drupal_set_message(t('There was an error uploading the file'), 'error');
+        }
+      }
+      else {
+        $refworks_xml = new DOMDocument();
+        $refworks_xml->loadXML($contents);
+        $refworks = new DOMDocument();
+        $xslt_path = drupal_get_path('module', 'islandora_govdocs') . '/xsl/refworks_to_mods.xsl';
+        $refworks->load($xslt_path);
+        $xslt = new XSLTProcessor();
+        $xslt->importStylesheet($refworks);
+        $new_mods = $xslt->transformToXml($refworks_xml);
+        $item = new Fedora_Item($collection_pid);
+        $result = $item->modify_datastream_by_value($new_mods, 'MODS', 'MODS record', 'text/xml');
+        if ($result) {
+          drupal_set_message(t('@file has been successfully uploaded', array('@file' => $file->filename))); 
+        }
+        else {
+          drupal_set_message(t('There was an error uploading the file'), 'error');
+        }
+      }
+    }
+    else {
+      $mods_url = $form_state['values']['url'];
+      $url_content = file_get_contents($mods_url);
+      if ($url_content == FALSE) {
+        drupal_set_message(t('@url is invalid', array('@url' => $mods_url)), 'error');
+      }
+      else {
+        $item = new Fedora_Item($collection_pid);
+        $item->modify_datastream_by_value($url_content, 'MODS', 'MODS record', 'text/xml');
+        drupal_set_message(t('MODS record has been updated successfully from @url', array('@url' => $mods_url)));
+      }
+    }
   }
-
-  if ($form_state['clicked_button']['#id'] == 'remove_cm') {
-    $candidates = $form_state['values']['content_models_to_remove'];
-    $count = 0;
-    foreach ($candidates as $candidate) {
-      if (is_string($candidate)) {
-        $policy->removeModel(ContentModel::loadFromModel($candidate));
-        $count++;
-      }
-    }
-    if ($count > 0) {
-      $policy->saveToFedora();
-      if ($count > 1) {
-        $s = 's';
-      }
-      drupal_set_message("$count collection model$s removed");
-    }
-  }
-
-  if ($form_state['clicked_button']['#id'] == 'change_model') {
-    $current_content_model = $form_state['values']['current_content_model'];
-    $new_content_model = $form_state['values']['new_content_model'];
-
-    $add_to_policy = TRUE;
-    $policy_cms = $policy->getContentModels();
-    foreach ($policy_cms as $policy_cm) {
-      if ($policy_cm->pid == $current_content_model) {
-        $namespace = $policy_cm->pid_namespace;
-      }
-      if ($policy_cm->pid == $new_content_model) {
-        $add_to_policy = FALSE;
-      }
-    }
-    if ($add_to_policy) {
-      $policy->addModel(ContentModel::loadFromModel($new_content_model), $namespace);
-      $policy->saveToFedora();
-    }
-    $query = "select \$object  from <#ri>
-    where (\$object <info:fedora/fedora-system:def/model#hasModel> <info:fedora/$current_content_model>
-      and \$object <info:fedora/fedora-system:def/relations-external#isMemberOfCollection> <info:fedora/$collection_pid>
-      and \$object <fedora-model:state> <info:fedora/fedora-system:def/model#Active>)";
-    $query = htmlentities(urlencode($query));
-    $content = '';
-
-    $url = variable_get('fedora_repository_url', 'http://localhost:8080/fedora/risearch');
-    $url .= "?type=tuples&flush=TRUE&format=csv&limit=$limit&offset=$offset&lang=itql&stream=on&query=" . $query;
-    $content .= do_curl($url);
-    $results = explode("\n", $content);
-    $object_pids = preg_replace('/^info:fedora\/|"object"/', '', $results);
-    $count = 0;
-    foreach ($object_pids as $object_pid) {
-      if (!$object_pid) {
-        continue;
-      }
-      $item = new fedora_item($object_pid);
-      $item->purge_relationship('hasModel', $current_content_model);
-      $item->add_relationship('hasModel', $new_content_model, FEDORA_MODEL_URI);
-      $count++;
-    }
-    drupal_set_message("$current_content_model changed to $new_content_model on $count objects");
-  }
-
+  
   if ($form_state['clicked_button']['#id'] == 'delete_collection') {
     $collection_name = $form_state['values']['collection_name'];
     $pids = get_related_items_as_array($collection_pid, 'isMemberOfCollection');
@@ -568,13 +551,50 @@ function govdocs_management_form_submit($form, &$form_state) {
       'file' => drupal_get_path('module', 'fedora_repository') . '/CollectionManagement.inc',
     );
 
-
     foreach ($pids as $pid) {
 
       $batch['operations'][] = array('delete_objects_as_batch', array($pid));
     }
 
     batch_set($batch);
-    batch_process('/fedora/repository');
+    batch_process('/fedora/repository/' . $collection_pid);
+  }
+}
+
+function govdocs_add_pdf_form($form_state, $pid) {
+  $form['#attributes'] = array('enctype' => "multipart/form-data");
+
+  $form['pdf']['upload'] = array(
+    '#type' => 'file',
+    '#title' => t('Upload PDF file'),
+    '#size' => 50,
+  );
+
+  $form['pdf']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Submit'),
+    '#id' => 'pdf_submit',
+  );
+
+  $form['pdf_pid'] = array(
+    '#type' => 'hidden',
+    '#value' => $pid,
+  );
+
+  return $form;
+}
+
+function govdocs_add_pdf_form_submit($form, &$form_state) {
+  global $base_url;
+  $file = file_save_upload('upload');
+  $pdf_url = str_replace(' ', '%20', $base_url . '/' . $file->filepath);
+  $pid = $form_state['values']['pdf_pid'];
+  $item = new Fedora_Item($pid);
+  $result = $item->add_datastream_from_url($pdf_url, 'PDF', 'PDF');
+  if ($result) {
+  drupal_set_message(t('PDF successfully added to @pid', array('@pid' => $pid)));
+  }
+  else {
+   drupal_set_message(t('An error occurred while adding the PDF!'), 'error'); 
   }
 }
