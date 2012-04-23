@@ -318,6 +318,7 @@ function govdocs_management_form(&$form_state, $this_collection_pid) {
   module_load_include('inc', 'fedora_repository', 'api/fedora_utils');
   module_load_include('inc', 'fedora_repository', 'CollectionPolicy');
   $item = new Fedora_Item($this_collection_pid);
+  $ds_array = $item->get_datastreams_list_as_array();
   $collection_name = $item->objectProfile->objLabel;
   $form_names = islandora_content_model_get_form_names('islandora:govdocscollectionCModel');
 
@@ -357,43 +358,54 @@ function govdocs_management_form(&$form_state, $this_collection_pid) {
     '#id' => 'create_class'
   );
 
-  $form['mods_creation'] = array(
-    '#title' => "Create MODS record",
-    '#type' => 'fieldset',
-    '#collapsible' => TRUE,
-    '#collapsed' => TRUE,
-  );
+  if (array_key_exists('MODS', $ds_array)) {
+    $form['mods_creation'] = array(
+      '#title' => "Create MODS record",
+      '#description' => t('MODS record already exists! Please edit the existing form rather than uploading a new one.'),
+      '#type' => 'fieldset',
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+    );
+  }
+  else {
+    $form['mods_creation'] = array(
+      '#title' => "Create MODS record",
+      '#type' => 'fieldset',
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+    );
 
-  $form['mods_creation']['upload'] = array(
-    '#type' => 'file',
-    '#title' => t('Upload MODS XML or Refworks file'),
-    '#size' => 50,
-  );
+    $form['mods_creation']['upload'] = array(
+      '#type' => 'file',
+      '#title' => t('Upload MODS XML or Refworks file'),
+      '#size' => 50,
+    );
 
-  $form['mods_creation']['url'] = array(
-    '#type' => 'textfield',
-    '#title' => t('MODS URL'),
-    '#size' => 40,
-  );
+    $form['mods_creation']['url'] = array(
+      '#type' => 'textfield',
+      '#title' => t('MODS URL'),
+      '#size' => 40,
+    );
 
-  $form['mods_creation']['submit'] = array(
-    '#type' => 'submit',
-    '#value' => t('Submit'),
-    '#id' => 'mods_submit',
-  );
+    $form['mods_creation']['submit'] = array(
+      '#type' => 'submit',
+      '#value' => t('Submit'),
+      '#id' => 'mods_submit',
+    );
+  }
 
   if (user_access('delete entire collections')) {
     $form['delete_collection'] = array(
-      '#title' => "Permanently Delete $collection_name",
+      '#title' => "Delete children from $collection_name",
       '#type' => 'fieldset',
-      '#description' => t("Clicking this button will delete all objects within $collection_name. <br /> <strong>This action cannot be undone.</strong>"),
+      '#description' => t("Clicking this button will delete all child collections within $collection_name. <br /> <strong>This action cannot be undone.</strong>"),
       '#collapsible' => TRUE,
       '#collapsed' => TRUE,
     );
     $form['delete_collection']['confirm'] = array(
       '#title' => "Are you sure?",
       '#type' => 'fieldset',
-      '#description' => t('<strong>Clicking the delete button will permanantly remove all objects from this collection. <br />  <strong>This action cannot be undone.</strong> '),
+      '#description' => t('<strong>Clicking the delete button will permanantly remove all child collections from this collection. <br />  <strong>This action cannot be undone.</strong> '),
       '#collapsible' => TRUE,
       '#collapsed' => TRUE,
     );
@@ -416,9 +428,9 @@ function govdocs_management_form_validate($form, &$form_state) {
   if ($form_state['clicked_button']['#id'] == 'mods_submit' && file_save_upload('upload') == 0 && $form_state['values']['url'] == NULL) {
     form_set_error('url', t('You must upload a file or enter a URL!'));
   }
-  
+
   if ($form_state['clicked_button']['#id'] == 'create_class' && $form_state['values']['collection_name'] == NULL) {
-      form_set_error('collection_name', t('You must enter a name for the new subsection!'));
+    form_set_error('collection_name', t('You must enter a name for the new subsection!'));
   }
 }
 
@@ -474,16 +486,18 @@ function govdocs_management_form_submit($form, &$form_state) {
 
     $collection = new Fedora_Item($collection_pid);
     $collection_mods = $collection->get_datastream_dissemination('MODS');
-    $mods_xml = new DOMDocument();
-    $mods_xml->loadXML($collection_mods);
-    $xsl_dom = new DOMDocument();
-    $xsl_dom->load($path . '/xsl/related-item.xsl');
-    $mods_xsl = new XSLTProcessor();
-    $mods_xsl->importStylesheet($xsl_dom);
-    $mods_string = $mods_xsl->transformToXml($mods_xml);
-    $mods_string = str_replace(array('<mods xmlns="http://www.loc.gov/mods/v3" xmlns:mods="http://www.loc.gov/mods/v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xlink="http://www.w3.org/1999/xlink">', '</mods>'), '', $mods_string) . '</mods>';
-    drupal_set_message('XML: ' . $mods_string);
-    $item->add_datastream_from_string($mods_string, 'MODS');
+    if ($collection_mods != NULL) {
+      $mods_xml = new DOMDocument();
+      $mods_xml->loadXML($collection_mods);
+      $xsl_dom = new DOMDocument();
+      $xsl_dom->load($path . '/xsl/related-item.xsl');
+      $mods_xsl = new XSLTProcessor();
+      $mods_xsl->importStylesheet($xsl_dom);
+      $mods_string = $mods_xsl->transformToXml($mods_xml);
+      $mods_string = '<?xml version="1.0"?><mods xmlns="http://www.loc.gov/mods/v3">' . str_replace(array('<?xml version="1.0"?>', '<mods xmlns="http://www.loc.gov/mods/v3" xmlns:mods="http://www.loc.gov/mods/v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xlink="http://www.w3.org/1999/xlink">', '<mods xmlns="http://www.loc.gov/mods/v3">', '</mods>'), '', $mods_string) . '</mods>';
+      drupal_set_message('XML: ' . $mods_string);
+      $item->add_datastream_from_string($mods_string, 'MODS');
+    }
     $item->add_relationship('isPartOf', $collection_pid);
     $collection_item = new Fedora_Item($collection_pid);
     $collection_item->add_relationship('hasPart', $new_collection_pid);
@@ -495,20 +509,23 @@ function govdocs_management_form_submit($form, &$form_state) {
     if (file_save_upload('upload') != 0) {
       $file = file_save_upload('upload');
       $file_url = str_replace(' ', '%20', $base_url . '/' . $file->filepath);
+      drupal_set_message('File url: ' . $file_url);
       $contents = file_get_contents($file_url);
-      $contents_header = substr($contents, 0, 14);
-      if ($contents_header == '<?xml version=') {
-      drupal_set_message('Contents: ' . $contents);
-      $item = new Fedora_Item($collection_pid);
-      $result = $item->modify_datastream_by_reference($file_url, 'MODS', 'MODS record', 'text/xml');
-      if ($result) {
-          drupal_set_message(t('@file has been successfully uploaded', array('@file' => $file->filename))); 
+      $contents_header = substr(trim($contents), 0, 14);
+      if ($contents_header == '<?xml version=' || $contents_header == '<mods xmlns="h') {
+        drupal_set_message('Contents: ' . $contents);
+        $item = new Fedora_Item($collection_pid);
+        drupal_set_message('Collection PID: ' . $collection_pid);
+        $result = $item->add_datastream_from_string($contents, 'MODS', 'MODS record', 'text/xml', 'M', 'Added MODS record from MODS XML file');
+        if ($result) {
+          drupal_set_message(t('@file has been successfully uploaded', array('@file' => $file->filename)));
         }
         else {
           drupal_set_message(t('There was an error uploading the file'), 'error');
         }
       }
       else {
+        drupal_set_message('Refworks contents: ' . $contents);
         $refworks_xml = new DOMDocument();
         $refworks_xml->loadXML($contents);
         $refworks = new DOMDocument();
@@ -518,9 +535,9 @@ function govdocs_management_form_submit($form, &$form_state) {
         $xslt->importStylesheet($refworks);
         $new_mods = $xslt->transformToXml($refworks_xml);
         $item = new Fedora_Item($collection_pid);
-        $result = $item->modify_datastream_by_value($new_mods, 'MODS', 'MODS record', 'text/xml');
+        $result = $item->add_datastream_from_string($new_mods, 'MODS', 'MODS record', 'text/xml', 'M', 'Added MODS record from Refworks file');
         if ($result) {
-          drupal_set_message(t('@file has been successfully uploaded', array('@file' => $file->filename))); 
+          drupal_set_message(t('@file has been successfully uploaded', array('@file' => $file->filename)));
         }
         else {
           drupal_set_message(t('There was an error uploading the file'), 'error');
@@ -535,12 +552,17 @@ function govdocs_management_form_submit($form, &$form_state) {
       }
       else {
         $item = new Fedora_Item($collection_pid);
-        $item->modify_datastream_by_value($url_content, 'MODS', 'MODS record', 'text/xml');
-        drupal_set_message(t('MODS record has been updated successfully from @url', array('@url' => $mods_url)));
+        $result = $item->add_datastream_from_url($url_content, 'MODS', 'MODS record', 'text/xml', 'M', 'Added MODS record from external URL');
+        if ($result) {
+          drupal_set_message(t('MODS record has been updated successfully from @url', array('@url' => $mods_url)));
+        }
+        else {
+          drupal_set_message(t('There was an error uploading the file'), 'error');
+        }
       }
     }
   }
-  
+
   if ($form_state['clicked_button']['#id'] == 'delete_collection') {
     $collection_name = $form_state['values']['collection_name'];
     $pids = get_related_items_as_array($collection_pid, 'isMemberOfCollection');
@@ -592,9 +614,9 @@ function govdocs_add_pdf_form_submit($form, &$form_state) {
   $item = new Fedora_Item($pid);
   $result = $item->add_datastream_from_url($pdf_url, 'PDF', 'PDF');
   if ($result) {
-  drupal_set_message(t('PDF successfully added to @pid', array('@pid' => $pid)));
+    drupal_set_message(t('PDF successfully added to @pid', array('@pid' => $pid)));
   }
   else {
-   drupal_set_message(t('An error occurred while adding the PDF!'), 'error'); 
+    drupal_set_message(t('An error occurred while adding the PDF!'), 'error');
   }
 }
