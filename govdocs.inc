@@ -157,15 +157,15 @@ class GovdocsCollectionClass extends CollectionClass {
 //      );
 //    }
 
-    if ($show_batch_tab && user_access('create batch process')) {
-      $tabset['batch_ingest_tab'] = array(
-        // #type and #title are the minimum requirements.
-        '#type' => 'tabpage',
-        '#title' => t('Batch Ingest'),
-        // This will be the content of the tab.
-        '#content' => drupal_get_form('batch_creation_form', $this->pid, $content_models),
-      );
-    }
+//    if ($show_batch_tab && user_access('create batch process')) {
+//      $tabset['batch_ingest_tab'] = array(
+//        // #type and #title are the minimum requirements.
+//        '#type' => 'tabpage',
+//        '#title' => t('Batch Ingest'),
+//        // This will be the content of the tab.
+//        '#content' => drupal_get_form('batch_creation_form', $this->pid, $content_models),
+//      );
+//    }
     return $tabset;
   }
 

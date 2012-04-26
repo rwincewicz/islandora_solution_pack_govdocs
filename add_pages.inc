@@ -513,9 +513,7 @@ function govdocs_management_form_submit($form, &$form_state) {
       $contents = file_get_contents($file_url);
       $contents_header = substr(trim($contents), 0, 14);
       if ($contents_header == '<?xml version=' || $contents_header == '<mods xmlns="h') {
-        drupal_set_message('Contents: ' . $contents);
         $item = new Fedora_Item($collection_pid);
-        drupal_set_message('Collection PID: ' . $collection_pid);
         $result = $item->add_datastream_from_string($contents, 'MODS', 'MODS record', 'text/xml', 'M', 'Added MODS record from MODS XML file');
         if ($result) {
           drupal_set_message(t('@file has been successfully uploaded', array('@file' => $file->filename)));
