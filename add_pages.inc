@@ -444,7 +444,7 @@ function govdocs_management_form_submit($form, &$form_state) {
   module_load_include('inc', 'fedora_repository', 'api/fedora_collection');
   module_load_include('inc', 'fedora_repository', 'api/fedora_item');
   module_load_include('inc', 'fedora_repository', 'api/dublin_core');
-  module_load_include('inc', 'islandora_collection_manager', 'CollectionManagement');
+  module_load_include('inc', 'fedora_repository', 'CollectionManagement');
   global $user;
   global $base_url;
   $path = drupal_get_path('module', 'islandora_govdocs');
@@ -574,14 +574,15 @@ function govdocs_management_form_submit($form, &$form_state) {
       'operations' => array(),
       'file' => drupal_get_path('module', 'fedora_repository') . '/CollectionManagement.inc',
     );
-    drupal_set_message('PIDs deleted: ' . implode(', ', $pids));
+
+
     foreach ($pids as $pid) {
 
       $batch['operations'][] = array('delete_objects_as_batch', array($pid));
     }
 
     batch_set($batch);
-    batch_process('/fedora/repository/' . $collection_pid);
+    batch_process('fedora/repository/' . $collection_pid);
   }
 }
 
