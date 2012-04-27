@@ -497,7 +497,7 @@ function govdocs_management_form_submit($form, &$form_state) {
       $mods_xsl->importStylesheet($xsl_dom);
       $mods_string = $mods_xsl->transformToXml($mods_xml);
       drupal_set_message('XML before: ' . $mods_string);
-      $mods_string = '<?xml version="1.0"?><mods xmlns="http://www.loc.gov/mods/v3">' . str_replace(array('<?xml version="1.0"?>', '<mods xmlns="http://www.loc.gov/mods/v3" xmlns:mods="http://www.loc.gov/mods/v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xlink="http://www.w3.org/1999/xlink">', '<mods xmlns="http://www.loc.gov/mods/v3">', '</mods>'), '', $mods_string) . '</mods>';
+      $mods_string = '<?xml version="1.0"?><mods xmlns="http://www.loc.gov/mods/v3">' . str_replace(array('<?xml version="1.0"?>', '<mods xmlns="http://www.loc.gov/mods/v3" xmlns:etd="http://www.ndltd.org/standards/metadata/etdms/1.0" xmlns:mods="http://www.loc.gov/mods/v3" xmlns:xlink="http://www.w3.org/1999/xlink">', '<mods xmlns="http://www.loc.gov/mods/v3" xmlns:mods="http://www.loc.gov/mods/v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xlink="http://www.w3.org/1999/xlink">', '<mods xmlns="http://www.loc.gov/mods/v3">', '</mods>'), '', $mods_string) . '</mods>';
       drupal_set_message('XML: ' . $mods_string);
       $item->add_datastream_from_string($mods_string, 'MODS');
     }
