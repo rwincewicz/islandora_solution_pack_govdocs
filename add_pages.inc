@@ -574,7 +574,7 @@ function govdocs_management_form_submit($form, &$form_state) {
       'operations' => array(),
       'file' => drupal_get_path('module', 'fedora_repository') . '/CollectionManagement.inc',
     );
-
+    drupal_set_message('PIDs deleted: ' . implode(', ', $pids));
     foreach ($pids as $pid) {
 
       $batch['operations'][] = array('delete_objects_as_batch', array($pid));
