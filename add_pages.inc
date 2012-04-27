@@ -454,6 +454,7 @@ function govdocs_management_form_submit($form, &$form_state) {
   if ($form_state['clicked_button']['#id'] == 'create_class') {
     $module_path = drupal_get_path('module', 'fedora_repository');
     $thumbnail = drupal_get_path('module', 'Fedora_Repository') . '/images/Crystal_Clear_filesystem_folder_grey.png';
+    $collection_view = drupal_get_path('module', 'islandora_solution_pack_govdocs') . '/xsl/govdocs.xsl';
     $pid_namespace = 'islandora';
     $new_collection_pid = Fedora_Item::get_next_PID_in_namespace($pid_namespace);
     $new_collection_label = $form_state['values']['collection_name'];
@@ -483,6 +484,7 @@ function govdocs_management_form_submit($form, &$form_state) {
     $item->add_relationship('hasModel', 'islandora:govdocscollectionCModel', FEDORA_MODEL_URI);
     $item->add_datastream_from_string($collection_policy_xml->saveXML(), 'COLLECTION_POLICY');
     $item->add_datastream_from_file($thumbnail, 'TN');
+    $item->add_datastream_from_file($collection_view, 'COLLECTION_VIEW');
 
     $collection = new Fedora_Item($collection_pid);
     $collection_mods = $collection->get_datastream_dissemination('MODS');
