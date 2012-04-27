@@ -444,7 +444,7 @@ function govdocs_management_form_submit($form, &$form_state) {
   module_load_include('inc', 'fedora_repository', 'api/fedora_collection');
   module_load_include('inc', 'fedora_repository', 'api/fedora_item');
   module_load_include('inc', 'fedora_repository', 'api/dublin_core');
-  module_load_include('inc', 'fedora_repository', 'CollectionManagement');
+  module_load_include('inc', 'islandora_collection_manager', 'CollectionManagement');
   global $user;
   global $base_url;
   $path = drupal_get_path('module', 'islandora_govdocs');
