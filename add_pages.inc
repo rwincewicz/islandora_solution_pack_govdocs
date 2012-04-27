@@ -564,51 +564,6 @@ function govdocs_management_form_submit($form, &$form_state) {
       }
     }
   }
-
-  if ($form_state['clicked_button']['#id'] == 'delete_collection') {
-     $current_content_model = $form_state['values']['current_content_model'];
-    $new_content_model = $form_state['values']['new_content_model'];
-
-    $add_to_policy = TRUE;
-    $policy_cms = $policy->getContentModels();
-    foreach ($policy_cms as $policy_cm) {
-      if ($policy_cm->pid == $current_content_model) {
-        $namespace = $policy_cm->pid_namespace;
-      }
-      if ($policy_cm->pid == $new_content_model) {
-        $add_to_policy = FALSE;
-      }
-    }
-    if ($add_to_policy) {
-      $policy->addModel(ContentModel::loadFromModel($new_content_model), $namespace);
-      $policy->saveToFedora();
-    }
-    $query = "select \$object  from <#ri>
-    where (\$object <info:fedora/fedora-system:def/model#hasModel> <info:fedora/$current_content_model>
-      and (\$object <info:fedora/fedora-system:def/relations-external#isMemberOfCollection> <info:fedora/$collection_pid>
-           or \$object <info:fedora/fedora-system:def/relations-external#isMemberOf> <info:fedora/$collection_pid>)
-      and \$object <fedora-model:state> <info:fedora/fedora-system:def/model#Active>)";
-    $query = htmlentities(urlencode($query));
-    $content = '';
-
-    $url = variable_get('fedora_repository_url', 'http://localhost:8080/fedora/risearch');
-    $url .= "?type=tuples&flush=TRUE&format=csv&limit=$limit&offset=$offset&lang=itql&stream=on&query=" . $query;
-    $content .= do_curl($url);
-    $results = explode("\n", $content);
-    $object_pids = preg_replace('/^info:fedora\/|"object"/', '', $results);
-    $count = 0;
-    foreach ($object_pids as $object_pid) {
-      if (!$object_pid) {
-        continue;
-      }
-      $item = new fedora_item($object_pid);
-      $item->purge_relationship('hasModel', $current_content_model);
-      $item->add_relationship('hasModel', $new_content_model, FEDORA_MODEL_URI);
-      $count++;
-    }
-    drupal_set_message("$current_content_model changed to $new_content_model on $count objects");
-  }
-
   // delete collection
 
   if ($form_state['clicked_button']['#id'] == 'delete_collection') {
@@ -623,8 +578,6 @@ function govdocs_management_form_submit($form, &$form_state) {
         $populated_child_collections[] = $child;
       }
     }
-
-
 
     $query = "select \$object \$collection from <#ri>
               where (\$object <info:fedora/fedora-system:def/relations-external#isMemberOf> \$collection
