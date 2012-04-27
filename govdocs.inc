@@ -107,7 +107,7 @@ class GovdocsCollectionClass extends CollectionClass {
     $form_state['storage']['collection_pid'] = $this->pid;
 
     if ($results != NULL) {
-//      if (array_key_exists('PDF', $ds_array)) {
+      if (array_key_exists('PDF', $ds_array)) {
         $tabset['view_tab'] = array(
           '#type' => 'tabpage',
           '#title' => 'View',
@@ -115,16 +115,16 @@ class GovdocsCollectionClass extends CollectionClass {
           '#content' => $content,
           '#weight' => -1,
         );
-//      }
-//      else {
-//        $tabset['view_tab'] = array(
-//          '#type' => 'tabpage',
-//          '#title' => 'View',
-//          '#selected' => $view_selected,
-//          '#content' => $collection_items,
-//          '#weight' => -1,
-//        );
-//      }
+      }
+      else {
+        $tabset['view_tab'] = array(
+          '#type' => 'tabpage',
+          '#title' => 'View',
+          '#selected' => $view_selected,
+          '#content' => $collection_items,
+          '#weight' => -1,
+        );
+      }
     }
 
     if (user_access('manage collections')) {
