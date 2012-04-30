@@ -422,7 +422,7 @@ function islandora_govdocs_required_fedora_objects() {
           'dsversion' => NULL,
         ),
         array(
-          'pid' => 'islandora:govdocsCollection',
+          'pid' => 'govdocs:govdocsCollection',
           'label' => 'Govdocs Collection',
           'cmodel' => 'islandora:govdocscollectionCModel',
           'parent' => 'islandora:root',

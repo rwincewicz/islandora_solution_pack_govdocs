@@ -4,6 +4,7 @@
         <type>text/xml</type>
         <type>text/plain</type>
         <type>application/xml</type>
+        <type>application/pdf</type>
     </mimetypes>
     <ingest_rules></ingest_rules>
     <datastreams>
@@ -13,6 +14,8 @@
         <datastream dsid="TN"></datastream>
         <datastream dsid="COLLECTION_POLICY"></datastream>
         <datastream dsid="MODS"></datastream>
+        <datastream dsid="PDF"></datastream>
+        <datastream dsid="PDFA"></datastream>
     </datastreams>
     <ingest_form dsid="QDC" page="2">
         <form_builder_method class="CollectionFormBuilder" file="plugins/CollectionFormBuilder.inc" handler="handleQDCForm" method="buildQDCForm" module=""></form_builder_method>

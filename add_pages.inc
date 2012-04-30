@@ -455,7 +455,7 @@ function govdocs_management_form_submit($form, &$form_state) {
     $module_path = drupal_get_path('module', 'fedora_repository');
     $thumbnail = drupal_get_path('module', 'Fedora_Repository') . '/images/Crystal_Clear_filesystem_folder_grey.png';
     $collection_view = drupal_get_path('module', 'islandora_govdocs') . '/xsl/govdocs.xsl';
-    $pid_namespace = 'islandora';
+    $pid_namespace = 'govdocs';
     $new_collection_pid = Fedora_Item::get_next_PID_in_namespace($pid_namespace);
     $new_collection_label = $form_state['values']['collection_name'];
     $all_cModels = get_content_models_as_option_array();
